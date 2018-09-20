@@ -16,8 +16,6 @@
 
 package io.confluent.connect.elasticsearch;
 
-import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
-import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.connect.errors.ConnectException;
@@ -110,7 +108,7 @@ public class ElasticsearchSinkTask extends SinkTask {
       if (client != null) {
         this.client = client;
       } else {
-        this.client = new JestElasticsearchClient(props);
+        this.client = new RestHighLevelElasticsearchClient(props);
       }
 
       ElasticsearchWriter.Builder builder = new ElasticsearchWriter.Builder(this.client)
@@ -130,7 +128,6 @@ public class ElasticsearchSinkTask extends SinkTask {
           .setBehaviorOnNullValues(behaviorOnNullValues);
 
       writer = builder.build();
-      writer.start();
     } catch (ConfigException e) {
       throw new ConnectException(
           "Couldn't start ElasticsearchSinkTask due to configuration error:",
@@ -153,12 +150,6 @@ public class ElasticsearchSinkTask extends SinkTask {
   public void put(Collection<SinkRecord> records) throws ConnectException {
     log.trace("Putting {} to Elasticsearch.", records);
     writer.write(records);
-  }
-
-  @Override
-  public void flush(Map<TopicPartition, OffsetAndMetadata> offsets) {
-    log.trace("Flushing data to Elasticsearch with the following offsets: {}", offsets);
-    writer.flush();
   }
 
   @Override

@@ -16,10 +16,18 @@
 
 package io.confluent.connect.elasticsearch;
 
-import io.confluent.connect.elasticsearch.bulk.BulkProcessor;
-import org.apache.kafka.common.utils.SystemTime;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.sink.SinkRecord;
+import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.bulk.BackoffPolicy;
+import org.elasticsearch.action.bulk.BulkProcessor;
+import org.elasticsearch.action.bulk.BulkRequest;
+import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.action.index.IndexRequest;
+import org.elasticsearch.common.unit.ByteSizeUnit;
+import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.common.xcontent.XContentType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,6 +39,8 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
 
 import static io.confluent.connect.elasticsearch.DataConverter.BehaviorOnNullValues;
 
@@ -45,7 +55,7 @@ public class ElasticsearchWriter {
   private final Set<String> ignoreSchemaTopics;
   private final Map<String, String> topicToIndexMap;
   private final long flushTimeoutMs;
-  private final BulkProcessor<IndexableRecord, ?> bulkProcessor;
+  private final BulkProcessor bulkProcessor;
   private final boolean dropInvalidMessage;
   private final BehaviorOnNullValues behaviorOnNullValues;
   private final DataConverter converter;
@@ -53,23 +63,23 @@ public class ElasticsearchWriter {
   private final Set<String> existingMappings;
 
   ElasticsearchWriter(
-      ElasticsearchClient client,
-      String type,
-      boolean useCompactMapEntries,
-      boolean ignoreKey,
-      Set<String> ignoreKeyTopics,
-      boolean ignoreSchema,
-      Set<String> ignoreSchemaTopics,
-      Map<String, String> topicToIndexMap,
-      long flushTimeoutMs,
-      int maxBufferedRecords,
-      int maxInFlightRequests,
-      int batchSize,
-      long lingerMs,
-      int maxRetries,
-      long retryBackoffMs,
-      boolean dropInvalidMessage,
-      BehaviorOnNullValues behaviorOnNullValues
+          final ElasticsearchClient client,
+          String type,
+          boolean useCompactMapEntries,
+          boolean ignoreKey,
+          Set<String> ignoreKeyTopics,
+          boolean ignoreSchema,
+          Set<String> ignoreSchemaTopics,
+          Map<String, String> topicToIndexMap,
+          long flushTimeoutMs,
+          int maxBufferedRecords,
+          int maxInFlightRequests,
+          int batchSize,
+          long lingerMs,
+          int maxRetries,
+          long retryBackoffMs,
+          boolean dropInvalidMessage,
+          BehaviorOnNullValues behaviorOnNullValues
   ) {
     this.client = client;
     this.type = type;
@@ -83,16 +93,42 @@ public class ElasticsearchWriter {
     this.behaviorOnNullValues = behaviorOnNullValues;
     this.converter = new DataConverter(useCompactMapEntries, behaviorOnNullValues);
 
-    bulkProcessor = new BulkProcessor<>(
-        new SystemTime(),
-        new BulkIndexingClient(client),
-        maxBufferedRecords,
-        maxInFlightRequests,
-        batchSize,
-        lingerMs,
-        maxRetries,
-        retryBackoffMs
-    );
+    final BulkProcessor.Listener listener = new BulkProcessor.Listener() {
+      @Override
+      public void beforeBulk(long executionId, BulkRequest request) {
+        int numberOfActions = request.numberOfActions();
+        log.debug("Executing bulk [{}] with {} requests",
+                executionId, numberOfActions);
+      }
+
+      @Override
+      public void afterBulk(long executionId, BulkRequest request,
+                            BulkResponse response) {
+        if (response.hasFailures()) {
+          log.warn("Bulk [{}] executed with failures", executionId);
+        } else {
+          log.debug("Bulk [{}] completed in {} milliseconds",
+                  executionId, response.getTook().getMillis());
+        }
+      }
+
+      @Override
+      public void afterBulk(long executionId, BulkRequest request, Throwable failure) {
+        log.error("Failed to execute bulk", failure);
+      }
+    };
+
+    BiConsumer<BulkRequest, ActionListener<BulkResponse>> bulkConsumer =
+            client::executeBulk;
+    BulkProcessor.Builder builder = BulkProcessor.builder(bulkConsumer, listener);
+    builder.setBulkActions(500);
+    builder.setBulkSize(new ByteSizeValue(1L, ByteSizeUnit.MB));
+    builder.setConcurrentRequests(0);
+    builder.setFlushInterval(TimeValue.timeValueSeconds(10L));
+    builder.setBackoffPolicy(BackoffPolicy
+            .constantBackoff(TimeValue.timeValueSeconds(1L), 3));
+
+    bulkProcessor = builder.build();
 
     existingMappings = new HashSet<>();
   }
@@ -243,7 +279,7 @@ public class ElasticsearchWriter {
 
       if (!ignoreSchema && !existingMappings.contains(index)) {
         try {
-          if (Mapping.getMapping(client, index, type) == null) {
+          if (!Mapping.mappingExists(client, index, type)) {
             Mapping.createMapping(client, index, type, sinkRecord.valueSchema());
           }
         } catch (IOException e) {
@@ -276,7 +312,7 @@ public class ElasticsearchWriter {
           ignoreKey,
           ignoreSchema);
       if (record != null) {
-        bulkProcessor.add(record, flushTimeoutMs);
+        bulkProcessor.add(new IndexRequest(index, type, record.key.id).source(record.payload, XContentType.JSON));
       }
     } catch (ConnectException convertException) {
       if (dropInvalidMessage) {
@@ -294,22 +330,12 @@ public class ElasticsearchWriter {
     }
   }
 
-  public void flush() {
-    bulkProcessor.flush(flushTimeoutMs);
-  }
-
-  public void start() {
-    bulkProcessor.start();
-  }
-
   public void stop() {
     try {
-      bulkProcessor.flush(flushTimeoutMs);
+      bulkProcessor.awaitClose(flushTimeoutMs, TimeUnit.MILLISECONDS);
     } catch (Exception e) {
       log.warn("Failed to flush during stop", e);
     }
-    bulkProcessor.stop();
-    bulkProcessor.awaitStop(flushTimeoutMs);
   }
 
   public void createIndicesForTopics(Set<String> assignedTopics) {

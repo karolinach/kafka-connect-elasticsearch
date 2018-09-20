@@ -141,7 +141,7 @@ public class ElasticsearchSinkConnectorConfig extends AbstractConfig {
     int order = 0;
     configDef.define(
         CONNECTION_URL_CONFIG,
-        Type.LIST,
+        Type.STRING,
         Importance.HIGH,
         CONNECTION_URL_DOC,
         group,

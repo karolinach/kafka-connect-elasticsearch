@@ -42,7 +42,6 @@ import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConst
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_KEY;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_VALUE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.SHORT_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.STRING_TYPE;
 import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.TEXT_TYPE;
 
 public class Mapping {
@@ -69,9 +68,9 @@ public class Mapping {
   /**
    * Get the JSON mapping for given index and type. Returns {@code null} if it does not exist.
    */
-  public static JsonObject getMapping(ElasticsearchClient client, String index, String type)
+  public static boolean mappingExists(ElasticsearchClient client, String index, String type)
       throws IOException {
-    return client.getMapping(index, type);
+    return client.mappingExists(index, type);
   }
 
   /**
@@ -131,15 +130,15 @@ public class Mapping {
       case FLOAT64:
         return DOUBLE_TYPE;
       case STRING:
-        switch (client.getVersion()) {
-          case ES_V1:
-          case ES_V2:
-            return STRING_TYPE;
-          case ES_V5:
-          case ES_V6:
-          default:
+//        switch (client.getVersion()) {
+//          case ES_V1:
+//          case ES_V2:
+//            return STRING_TYPE;
+//          case ES_V5:
+//          case ES_V6:
+//          default:
             return TEXT_TYPE;
-        }
+//        }
       case BYTES:
         return BINARY_TYPE;
       default:

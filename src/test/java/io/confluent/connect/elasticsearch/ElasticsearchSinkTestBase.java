@@ -19,7 +19,6 @@ package io.confluent.connect.elasticsearch;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
-import io.confluent.connect.elasticsearch.jest.JestElasticsearchClient;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -57,7 +56,7 @@ public class ElasticsearchSinkTestBase extends ESIntegTestCase {
   @Before
   public void setUp() throws Exception {
     super.setUp();
-    client = new JestElasticsearchClient("http://localhost:" + getPort());
+    client = new RestHighLevelElasticsearchClient("http://localhost:" + getPort());
     converter = new DataConverter(true, BehaviorOnNullValues.IGNORE);
   }
 
