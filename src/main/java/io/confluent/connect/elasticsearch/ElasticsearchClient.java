@@ -73,17 +73,6 @@ public interface ElasticsearchClient extends AutoCloseable {
   void executeBulk(BulkRequest bulk, ActionListener listener);
 
   /**
-   * Executes a search.
-   *
-   * @param query the search query
-   * @param index the index to search
-   * @param type the type to search
-   * @return the search result
-   * @throws IOException if the client cannot execute the request
-   */
-  JsonObject search(String query, String index, String type) throws IOException;
-
-  /**
    * Shuts down the client.
    */
   void close();

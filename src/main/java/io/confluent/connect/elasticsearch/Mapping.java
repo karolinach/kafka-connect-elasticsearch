@@ -19,30 +19,14 @@ package io.confluent.connect.elasticsearch;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.google.gson.JsonObject;
-import org.apache.kafka.connect.data.Date;
-import org.apache.kafka.connect.data.Decimal;
-import org.apache.kafka.connect.data.Field;
-import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.Time;
-import org.apache.kafka.connect.data.Timestamp;
+import org.apache.kafka.connect.data.*;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.BINARY_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.BOOLEAN_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.BYTE_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.DOUBLE_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.FLOAT_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.INTEGER_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.LONG_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_KEY;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.MAP_VALUE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.SHORT_TYPE;
-import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.TEXT_TYPE;
+import static io.confluent.connect.elasticsearch.ElasticsearchSinkConnectorConstants.*;
 
 public class Mapping {
 
@@ -130,15 +114,7 @@ public class Mapping {
       case FLOAT64:
         return DOUBLE_TYPE;
       case STRING:
-//        switch (client.getVersion()) {
-//          case ES_V1:
-//          case ES_V2:
-//            return STRING_TYPE;
-//          case ES_V5:
-//          case ES_V6:
-//          default:
-            return TEXT_TYPE;
-//        }
+        return TEXT_TYPE;
       case BYTES:
         return BINARY_TYPE;
       default:

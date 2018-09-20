@@ -24,21 +24,13 @@ import org.elasticsearch.action.bulk.BulkProcessor;
 import org.elasticsearch.action.bulk.BulkRequest;
 import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.index.IndexRequest;
-import org.elasticsearch.common.unit.ByteSizeUnit;
-import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.Collections;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
@@ -63,7 +55,7 @@ public class ElasticsearchWriter {
   private final Set<String> existingMappings;
 
   ElasticsearchWriter(
-          final ElasticsearchClient client,
+          ElasticsearchClient client,
           String type,
           boolean useCompactMapEntries,
           boolean ignoreKey,
@@ -121,12 +113,11 @@ public class ElasticsearchWriter {
     BiConsumer<BulkRequest, ActionListener<BulkResponse>> bulkConsumer =
             client::executeBulk;
     BulkProcessor.Builder builder = BulkProcessor.builder(bulkConsumer, listener);
-    builder.setBulkActions(500);
-    builder.setBulkSize(new ByteSizeValue(1L, ByteSizeUnit.MB));
-    builder.setConcurrentRequests(0);
-    builder.setFlushInterval(TimeValue.timeValueSeconds(10L));
+    builder.setBulkActions(batchSize);
+    builder.setConcurrentRequests(maxInFlightRequests - 1);
+    builder.setFlushInterval(TimeValue.timeValueMillis(flushTimeoutMs));
     builder.setBackoffPolicy(BackoffPolicy
-            .constantBackoff(TimeValue.timeValueSeconds(1L), 3));
+            .constantBackoff(TimeValue.timeValueMillis(retryBackoffMs), maxRetries));
 
     bulkProcessor = builder.build();
 
